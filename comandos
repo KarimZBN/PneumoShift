@@ -1,0 +1,8 @@
+descrição instalação das bibliotecas
+
+1 - instalar o arquivo requirements.txt
+pip install -r requirements.txt
+
+2 - Execução da aplicação
+
+python main.py

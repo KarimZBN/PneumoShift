@@ -1,0 +1,22 @@
+# Dados (grandes / externos — ver README para download e conversão)
+dados/
+
+# Resultados de execução (não versionados)
+resultados/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Arquivos temporários do Office
+~$*
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
