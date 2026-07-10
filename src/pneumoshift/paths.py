@@ -26,17 +26,21 @@ DADOS_TESTE = DADOS / "test"
 RESULTADOS = RAIZ / "resultados"
 
 
-def pasta_dados(base, geometria):
-    """Pasta de teste de uma (base, geometria).
+def pasta_dados(base, geometria=None):
+    """Pasta de teste de uma base. A geometria NAO altera a pasta.
 
-    Na RSNA a geometria ja esta gravada no PNG por dois conversores distintos:
-      rsna_padding = converter_rsna_padding.py (padding letterbox)
-      rsna         = converter_rsna.py         (resize direto / esticado)
-    Na Chest X-Ray (cxray) sao os JPEGs originais (geometria aplicada no
-    pre-processamento), entao a pasta e a mesma para as duas geometrias.
+    Os PNGs sao gravados no TAMANHO ORIGINAL (converter_rsna.py) e os JPEGs da
+    Chest X-Ray sao os originais; em ambos a geometria (padding/esticar) e aplicada
+    no pre-processamento da inferencia, nao "assada" no disco. Por isso a mesma
+    pasta serve as duas geometrias. O parametro `geometria` e aceito e ignorado
+    (mantido por compatibilidade de chamada).
+
+    RSNA: usa-se o POOL de teste versionado (rsna_pool) como conjunto de teste da
+    base — a amostra pareada 234/390 e sorteada dele. A validacao (rsna_validacao)
+    e usada so para a definicao do limiar.
     """
     if base == "rsna":
-        return DADOS_TESTE / ("rsna_padding" if geometria == "padding" else "rsna")
+        return DADOS_TESTE / "rsna_pool"
     if base == "cxray":
         return DADOS_TESTE / "cxray"
     raise ValueError(f"base invalida: {base!r} (use 'cxray' ou 'rsna').")

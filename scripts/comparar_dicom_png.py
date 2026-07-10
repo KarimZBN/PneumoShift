@@ -2,8 +2,8 @@
 Compara o DICOM bruto da RSNA com o PNG convertido e mede o aspect ratio das bases.
 
   (1) ORIENTACAO / CANTOS — reproduz em memoria a conversao do converter_rsna.py
-      (min-max 0-255 + resize 224x224) e compara, pixel a pixel, com o PNG salvo em
-      dados/test/rsna. Igualdade indica que a conversao nao gira, espelha nem inverte
+      (min-max 0-255, TAMANHO ORIGINAL) e compara, pixel a pixel, com o PNG salvo em
+      dados/test/rsna_pool. Igualdade indica que a conversao nao gira, espelha nem inverte
       a imagem, e que os cantos escuros vem do proprio dado (recorte do detector).
       Imprime tambem a intensidade media dos 4 cantos (bruto x PNG).
 
@@ -29,28 +29,27 @@ from pneumoshift import paths
 
 # --- Configuracao (alinhada ao converter_rsna.py) ---
 SEED = 13
-IMG_SIZE = (224, 224)
-N_COMPARAR = 200           # DICOMs para a prova de orientacao (bruto x PNG)
+IMG_SIZE = (224, 224)     # (mantido por referencia; a conversao nao redimensiona)
+N_COMPARAR = 200           # DICOMs para a verificacao de orientacao (bruto x PNG)
 N_ASPECT = 400             # imagens por base para a medida de aspect ratio
 CANTO = 20                 # tamanho (px) do quadrado de canto amostrado
 TOL_QUADRADO = 0.02        # tolerancia p/ considerar "quadrado" (|AR-1| <= tol)
 
 # --- Caminhos ---
 DICOM_DIR = paths.DADOS / "raw" / "rsna" / "stage_2_train_images"
-PNG_RSNA_DIR = paths.DADOS_TESTE / "rsna"          # {NORMAL,PNEUMONIA}/*.png
+PNG_RSNA_DIR = paths.DADOS_TESTE / "rsna_pool"     # {NORMAL,PNEUMONIA}/*.png
 KAGGLE_DIR = paths.DADOS_TESTE / "cxray"          # {NORMAL,PNEUMONIA}/*.jpeg
 RESULTS_DIR = paths.RESULTADOS / "csv"
 
 
 def converter_em_memoria(patient_id):
-    """Reproduz a conversao do converter_rsna.py, sem salvar em disco."""
+    """Reproduz a conversao do converter_rsna.py (min-max 0-255, TAMANHO ORIGINAL)."""
     ds = pydicom.dcmread(str(DICOM_DIR / f"{patient_id}.dcm"))
     arr = ds.pixel_array.astype(np.float32)
     arr -= arr.min()
     if arr.max() > 0:
         arr = arr / arr.max() * 255.0
-    arr = arr.astype(np.uint8)
-    return cv2.resize(arr, IMG_SIZE)
+    return arr.astype(np.uint8)          # sem resize: geometria vai no pre-processamento
 
 
 def intensidade_cantos(img):
@@ -92,7 +91,7 @@ def prova_orientacao():
     amostra = pngs[:N_COMPARAR]
 
     if not amostra:
-        print("  Nenhum PNG encontrado em dados/test/rsna — rode converter_rsna.py antes.")
+        print("  Nenhum PNG encontrado em dados/test/rsna_pool — rode converter_rsna.py antes.")
         return
 
     identicos = divergentes = sem_dicom = 0

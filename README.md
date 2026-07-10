@@ -19,9 +19,10 @@ src/pneumoshift/          Pacote com o codigo reutilizavel
   gradcam.py                Grad-CAM sobre o MobileNetV2 aninhado
 
 scripts/                  Executaveis (o que se roda)
-  converter_rsna.py         DICOM -> PNG (resize direto)         [dados/test/rsna]
-  converter_rsna_padding.py DICOM -> PNG (padding letterbox)     [dados/test/rsna_padding]
+  split_rsna.py             Separa a RSNA em validacao x pool de teste (sem vazamento) -> dados/splits/
+  converter_rsna.py         DICOM -> PNG no TAMANHO ORIGINAL   [dados/test/rsna_validacao, rsna_pool]
   avaliar_lote.py           Avalia uma execucao (base+geometria) -> predicoes.csv + metricas.json
+  avaliar_rsna_rodadas.py   Limiar em validacao separada + N rodadas com seeds -> media +- desvio
   analise_estatistica.py    AUC/calibracao/IC bootstrap + figuras (individuais e comparativas)
   demo_imagem.py            Classifica 1 imagem + Grad-CAM (inspecao visual)
   gradcam_lote.py           Grad-CAM em lote por categoria (VP/VN/FP/FN)
@@ -31,12 +32,15 @@ scripts/                  Executaveis (o que se roda)
 
 tests/
   test_gradcam.py           Valida que o Grad-CAM opera sobre o forward correto
+  test_split.py             Valida que validacao e pool da RSNA sao disjuntos (zero vazamento)
 
 resultados/               Saidas por execucao (nao versionadas; so a estrutura via .gitkeep)
-  <base>_<geometria>/       kaggle_padding, kaggle_esticar, rsna_padding, rsna_esticar
-                            -> predicoes.csv, metricas.json, roc.png, calibracao.png, gradcam/
-  _comparacoes/dominio/     kaggle vs rsna (padding) -> domain shift
-  _comparacoes/geometria/   padding vs esticar por base -> item #4
+  <base>/<geometria>_<timestamp>_seed<N>/
+                            -> predicoes.csv, metricas.json, roc.png, calibracao.png
+  gradcam/<base>_<geometria>_<timestamp>/
+                            -> VP/VN/FP/FN (overlays), foco.csv, foco_resumo.csv, indice.csv
+  _comparacoes/run_<timestamp>/
+                            -> dominio/ (cxray vs rsna), geometria/ (padding vs esticar), resumo_geral.csv
 
 modelo/keras_model.h5     Modelo pre-treinado avaliado
 requirements.txt          Dependencias
@@ -45,8 +49,8 @@ REPRODUCAO.md             Guia passo a passo
 
 Não versionados (ver `.gitignore`): `dados/` (imagens, baixadas à parte) e o conteúdo de
 `resultados/` (CSVs e figuras gerados pela execução ficam local/nuvem). Apenas a **estrutura
-de pastas** de `resultados/` é preservada no repositório (arquivos `.gitkeep`), documentando
-a convenção `<base>_<geometria>` — cada execução tem sua pasta autocontida.
+de pastas** de `resultados/` é preservada no repositório (arquivos `.gitkeep`) — cada execução
+tem sua pasta autocontida, identificada por base, geometria e timestamp.
 
 ## Componentes
 
@@ -58,10 +62,12 @@ e o Grad-CAM ficam definidos uma única vez e são importados pelos scripts.
 **Avaliação** — `avaliar_lote.py` seleciona uma amostra pareada de 234 normais + 390
 pneumonia (a mesma proporção do conjunto de teste do Kaggle usado por Shao, 2021), roda a
 inferência e grava um CSV com a predição por imagem e o resumo (acurácia, precisão,
-sensibilidade, especificidade, F1 e AUC). Troque `FONTE` no topo do arquivo.
+sensibilidade, especificidade, F1 e AUC). Ajuste `BASE` e `GEOMETRIA` no topo do arquivo.
 
-**Geometria** — a entrada usa padding letterbox (preserva a proporção). `converter_rsna_padding.py`
-gera a variante com padding aplicado já na conversão DICOM, para comparação com o resize direto.
+**Geometria** — a entrada usa padding letterbox (preserva a proporção), aplicado no
+pré-processamento da inferência. As imagens são gravadas no tamanho original (os PNGs da RSNA
+por `converter_rsna.py`, os JPEGs da Chest X-Ray originais), sem geometria fixada no disco;
+assim a mesma pasta serve tanto ao padding (letterbox) quanto ao esticar (resize direto).
 
 **Explicabilidade** — `gradcam_lote.py` gera os mapas Grad-CAM separados por categoria de
 acerto/erro; `analise_foco.py` quantifica objetivamente onde a ativação se concentra;
@@ -72,8 +78,9 @@ documentam que a conversão é sem perdas e não altera a orientação da imagem
 
 ## Sementes
 
-`converter_rsna.py` / `converter_rsna_padding.py` → `SEED = 13`;
-`avaliar_lote.py` e demais → `SEED = 42`.
+`split_rsna.py` → `SEED_SPLIT = 20260710` (fixa a partição validação/pool; `converter_rsna.py`
+apenas lê os splits, não sorteia); `avaliar_lote.py` e a seleção pareada → `SEED = 42`;
+`avaliar_rsna_rodadas.py` → seeds `42..51` (uma por rodada).
 
 ## Licença
 

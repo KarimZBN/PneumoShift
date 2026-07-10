@@ -1,4 +1,5 @@
 """Selecao reprodutivel de imagens das bases de teste."""
+import csv
 import random
 from pathlib import Path
 
@@ -8,24 +9,44 @@ N_PNEUMONIA = 390
 EXTS = (".jpeg", ".jpg", ".png")
 
 
-def listar_imagens(folder):
-    """Lista os arquivos de imagem de uma pasta (nomes)."""
-    return [f.name for f in Path(folder).iterdir() if f.suffix.lower() in EXTS]
+def ler_rotulos_rsna(labels_csv):
+    """Le o CSV de rotulos da RSNA e devolve (pneumonia_ids, normal_ids, ambiguos).
 
-
-def selecionar(folder, n, seed=SEED):
-    """Sorteia n arquivos de forma reprodutivel.
-
-    A lista e ORDENADA (sorted) antes do embaralhamento: como iterdir() devolve os
-    arquivos na ordem do sistema de arquivos (que varia entre maquinas/SO), sem a
-    ordenacao previa o shuffle com semente fixa produziria selecoes diferentes em
-    ambientes diferentes. Com sorted() a selecao passa a ser deterministica.
+    Target=1 -> pneumonia; Target=0 -> normal (ausencia de anotacao de opacidade, nao
+    necessariamente exame normal). IDs presentes nas duas classes sao descartados.
     """
-    arquivos = sorted(listar_imagens(folder))
-    random.seed(seed)
-    random.shuffle(arquivos)
-    if len(arquivos) < n:
-        print(f"  ATENCAO: '{Path(folder).name}' tem {len(arquivos)} imagens "
-              f"(pedido: {n}). Usando todas.")
-        return arquivos
+    pneumonia_ids, normal_ids = set(), set()
+    with open(labels_csv, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            t = row["Target"].strip()
+            if t == "1":
+                pneumonia_ids.add(row["patientId"])
+            elif t == "0":
+                normal_ids.add(row["patientId"])
+    ambiguos = pneumonia_ids & normal_ids
+    return pneumonia_ids - ambiguos, normal_ids - ambiguos, ambiguos
+
+
+def ler_split(caminho):
+    """Le um arquivo de split (uma coluna patientId) e devolve a lista de IDs, em ordem."""
+    ids = []
+    with open(caminho, newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            pid = (row.get("patientId") or "").strip()
+            if pid:
+                ids.append(pid)
+    return ids
+
+
+def selecionar(pasta, n, seed=SEED):
+    """Seleciona reprodutivelmente n arquivos de imagem de `pasta`.
+
+    Ordena os nomes (torna a selecao independente da ordem do sistema de arquivos),
+    embaralha com semente fixa e devolve os primeiros n. Se houver menos que n,
+    devolve todos os disponiveis.
+    """
+    pasta = Path(pasta)
+    arquivos = sorted(p.name for p in pasta.iterdir()
+                      if p.is_file() and p.suffix.lower() in EXTS)
+    random.Random(seed).shuffle(arquivos)
     return arquivos[:n]

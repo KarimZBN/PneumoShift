@@ -11,7 +11,7 @@ Le resultados/<base>_<geometria>/predicoes.csv de cada execucao existente e prod
 
   Comparativas (em resultados/_comparacoes/):
     - dominio/    cxray vs rsna na geometria canonica (padding) -> domain shift
-    - geometria/  padding vs esticar por base -> sensibilidade a geometria (item #4)
+    - geometria/  padding vs esticar por base -> sensibilidade da metrica a geometria
 
   Consolidado (em resultados/_comparacoes/):
     - resumo_geral.csv   (uma linha por execucao)
@@ -93,10 +93,19 @@ def bootstrap_ic(y_true, y_score, limiar=LIMIAR, n=N_BOOT, seed=SEED):
 
 
 def analisar_execucao(base, geometria):
-    """Analisa uma execucao (se o predicoes.csv existir). Devolve dict ou None."""
+    """Localiza a execucao mais recente de (base, geometria) e a analisa. Dict ou None."""
     pasta = paths.execucao_mais_recente(base, geometria)
     if pasta is None:
         return None
+    return analisar_pasta(base, geometria, pasta)
+
+
+def analisar_pasta(base, geometria, pasta):
+    """Analisa a execucao em `pasta` (deve conter predicoes.csv). Devolve o dict de metricas.
+
+    Gera, na propria pasta: metricas_estat.json, roc.png, calibracao.png. Reutilizavel
+    tanto pelo main() (varre tudo) quanto pelo avaliar_lote (chama logo apos gravar o CSV).
+    """
     csv_path = pasta / "predicoes.csv"
 
     y_true, y_score, resultado = ler_csv(csv_path)
@@ -175,17 +184,25 @@ def _fig_calibracao(execucoes, destino, titulo):
     plt.tight_layout(); plt.savefig(destino, dpi=150); plt.close()
 
 
-def comparativas(dados):
-    """Gera as figuras comparativas em _comparacoes/{dominio,geometria}/."""
+def _ref_execucoes(dados):
+    """Linha por execucao (base, geometria -> pasta) para registrar o que entrou no run."""
+    return {f"{b}_{g}": d["_pasta"].name for (b, g), d in sorted(dados.items())}
+
+
+def comparativas(dados, run_dir):
+    """Gera as figuras comparativas dentro de run_dir/{dominio,geometria}/.
+
+    Nomes simples e fixos; o que distingue um run do outro e a PASTA (run_<timestamp>),
+    nao o nome do arquivo. Assim cada execucao do analise_estatistica fica autocontida."""
     # --- DOMINIO: cxray vs rsna na geometria canonica ---
     dom = {b: dados.get((b, GEOMETRIA_CANONICA)) for b in BASES}
     dom = {b: d for b, d in dom.items() if d is not None}
     if len(dom) == 2:
         _fig_roc({b.upper(): d for b, d in dom.items()},
-                 COMP_DIR / "dominio" / f"roc_cxray-vs-rsna_{GEOMETRIA_CANONICA}.png",
+                 run_dir / "dominio" / f"roc_cxray-vs-rsna_{GEOMETRIA_CANONICA}.png",
                  f"ROC — Kaggle vs RSNA ({GEOMETRIA_CANONICA})")
         _fig_calibracao({b.upper(): d for b, d in dom.items()},
-                        COMP_DIR / "dominio" / f"calibracao_cxray-vs-rsna_{GEOMETRIA_CANONICA}.png",
+                        run_dir / "dominio" / f"calibracao_cxray-vs-rsna_{GEOMETRIA_CANONICA}.png",
                         f"Calibracao — Kaggle vs RSNA ({GEOMETRIA_CANONICA})")
         print(f"\n[comparacao dominio] gerada ({GEOMETRIA_CANONICA})")
 
@@ -195,14 +212,17 @@ def comparativas(dados):
         geo = {g: d for g, d in geo.items() if d is not None}
         if len(geo) == 2:
             _fig_roc({g: d for g, d in geo.items()},
-                     COMP_DIR / "geometria" / f"roc_padding-vs-esticar_{base}.png",
+                     run_dir / "geometria" / f"roc_padding-vs-esticar_{base}.png",
                      f"ROC — padding vs esticar ({base})")
             print(f"[comparacao geometria] gerada ({base})")
 
 
-def salvar_resumo(dados):
-    COMP_DIR.mkdir(parents=True, exist_ok=True)
-    with open(COMP_DIR / "resumo_geral.csv", "w", newline="", encoding="utf-8-sig") as f:
+def salvar_resumo(dados, run_dir):
+    run_dir.mkdir(parents=True, exist_ok=True)
+    # registro do que entrou neste run (rastreabilidade: qual execucao de cada base/geo)
+    with open(run_dir / "execucoes.json", "w", encoding="utf-8") as f:
+        json.dump(_ref_execucoes(dados), f, indent=2, ensure_ascii=False)
+    with open(run_dir / "resumo_geral.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["base", "geometria", "n", "auc_sklearn", "auc_mann_whitney",
                     "brier", "ece", "acuracia", "acuracia_ic95", "sensibilidade",
@@ -233,10 +253,12 @@ def main():
         print("Nenhum predicoes.csv encontrado em resultados/<base>_<geometria>/.")
         return
 
-    comparativas(dados)
-    salvar_resumo(dados)
+    from datetime import datetime
+    run_dir = COMP_DIR / f"run_{datetime.now():%Y%m%d-%H%M%S}"
+    comparativas(dados, run_dir)
+    salvar_resumo(dados, run_dir)
     print(f"\nExecucoes analisadas: {len(dados)}")
-    print(f"Comparativas + resumo em: {COMP_DIR}")
+    print(f"Comparativas + resumo em: {run_dir}")
 
 
 if __name__ == "__main__":

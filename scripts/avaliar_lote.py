@@ -12,7 +12,7 @@ Para cada imagem grava-se o score da classe pneumonia (usado no AUC). As metrica
 derivam da matriz de confusao.
 
 Uso:
-    python scripts/avaliar_lote.py      (ajuste FONTE no topo)
+    python scripts/avaliar_lote.py      (ajuste BASE e GEOMETRIA no topo)
 """
 import sys
 from pathlib import Path
@@ -34,16 +34,16 @@ from pneumoshift.metrics import CLASS_NAMES, LIMIAR
 
 
 # --- Configuracao ---
-BASE = "cxray"                  # "cxray" ou "rsna"
-GEOMETRIA = "esticar"          # "padding" ou "esticar"
+BASE = "rsna"                  # "cxray" ou "rsna"
+GEOMETRIA = "padding"          # "padding" (letterbox) ou "esticar" (resize direto)
 BATCH_SIZE = 100
 # Amostra pareada: 234 normais + 390 pneumonia (N_NORMAL/N_PNEUMONIA em pneumoshift/data.py).
 
-# Pasta de teste (helper em paths). Na RSNA a geometria ja esta gravada no PNG pelos
-# dois conversores (rsna_padding vs rsna); nesse caso o pre-processamento aqui e no-op
-# (a imagem ja e 224x224). Na Kaggle a geometria e aplicada no pre-processamento.
-TEST_DIR = paths.pasta_dados(BASE, GEOMETRIA)
-PREPROC = "esticar" if BASE == "rsna" else GEOMETRIA   # rsna: no-op; cxray: aplica
+# Pasta de teste (helper em paths). Os PNGs/JPEGs estao no tamanho original em ambas as
+# bases; a geometria (padding/esticar) e aplicada aqui, no pre-processamento — de forma
+# identica para cxray e rsna (sem geometria "assada" no disco).
+TEST_DIR = paths.pasta_dados(BASE)
+PREPROC = GEOMETRIA
 
 
 
@@ -135,7 +135,7 @@ def escrever_csv(caminho, met, linhas, total_por_classe, y_score):
 
 
 def escrever_json(caminho, met, total_por_classe, y_score):
-    """Grava as metricas finais em JSON (leve, versionavel como prova dos numeros)."""
+    """Grava as metricas finais em JSON (leve, versionavel)."""
     sat = sum(1 for s in y_score if s >= 1.0)
     dados = {
         "base": BASE, "geometria": GEOMETRIA, "limiar": LIMIAR,
@@ -171,6 +171,17 @@ def main():
     escrever_csv(OUT_DIR / "predicoes.csv", met, linhas, total, y_score)
     escrever_json(OUT_DIR / "metricas.json", met, total, y_score)
     print(f"\nResultados salvos em: {OUT_DIR}/ (predicoes.csv, metricas.json)")
+
+    # Analise estatistica desta execucao (AUC/Brier/ECE + IC bootstrap, roc.png, calibracao.png).
+    # Import tardio: so carrega matplotlib/sklearn quando de fato roda. Tolerante a falha para
+    # nao perder o CSV/JSON ja gravados acima.
+    try:
+        from analise_estatistica import analisar_pasta
+        analisar_pasta(BASE, GEOMETRIA, OUT_DIR)
+        print(f"Estatistica gerada em: {OUT_DIR}/ (metricas_estat.json, roc.png, calibracao.png)")
+    except Exception as e:
+        print(f"[aviso] analise estatistica nao rodou ({e}). "
+              f"Rode 'python scripts/analise_estatistica.py' depois.")
 
 if __name__ == "__main__":
     main()

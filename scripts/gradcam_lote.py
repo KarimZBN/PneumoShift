@@ -31,20 +31,23 @@ from pneumoshift.metrics import categoria, CLASS_NAMES, LIMIAR
 
 
 # --- Configuracao ---
-BASE = "cxray"                  # "cxray" ou "rsna"
+BASE = "rsna"                  # "cxray" ou "rsna"
 GEOMETRIA = "padding"          # "padding" ou "esticar"
-N_NORMAL = 50
-N_PNEUMONIA = 50
+N_NORMAL = 100
+N_PNEUMONIA = 100
 # Quantos overlays gerar por categoria (0 = nenhum, None = todos). Foco nos erros.
 LIMITES = {"FP": None, "FN": None, "VP": 15, "VN": 15}
 
-TEST_DIR = paths.pasta_dados(BASE, GEOMETRIA)
-PREPROC = "esticar" if BASE == "rsna" else GEOMETRIA   # rsna: no-op; cxray: aplica
+# PNGs/JPEGs no tamanho original; a geometria e aplicada aqui (pipeline novo), identica
+# para cxray e rsna. RSNA usa o pool de teste (pasta_dados resolve).
+TEST_DIR = paths.pasta_dados(BASE)
+PREPROC = GEOMETRIA
 
-# Grava dentro da execucao mais recente daquela base/geometria (a que avaliar_lote criou),
-# subpasta gradcam/. Se nenhuma existir, cria uma execucao nova.
-_exec = paths.execucao_mais_recente(BASE, GEOMETRIA) or paths.nova_execucao(BASE, GEOMETRIA)
-OUT_DIR = _exec / "gradcam"
+# Saida ISOLADA em resultados/gradcam/<base>_<geometria>_<timestamp>/, separada das pastas
+# de execucao do avaliar_lote (que guardam so metricas/CSV/figuras leves). Cada rodada de
+# Grad-CAM/foco tem a propria pasta e nao polui a analise.
+from datetime import datetime as _dt
+OUT_DIR = paths.RESULTADOS / "gradcam" / f"{BASE}_{GEOMETRIA}_{_dt.now():%Y%m%d-%H%M%S}"
 
 
 def main():

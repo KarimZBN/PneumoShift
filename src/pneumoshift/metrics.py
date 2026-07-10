@@ -37,7 +37,7 @@ def categoria(real_pneumonia, pred_pneumonia):
     return "VN"
 
 
-# --- Metricas via scikit-learn (nucleo estatistico da devolutiva) ---
+# --- Metricas via scikit-learn ---
 
 def auc_sklearn(y_true, y_score):
     """AUC-ROC pela referencia auditavel do scikit-learn (roc_auc_score)."""

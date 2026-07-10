@@ -20,12 +20,13 @@ import numpy as np
 from keras.models import load_model
 
 from pneumoshift import paths, gradcam
-from pneumoshift.preprocess import redimensionar, preparar_entrada
+from pneumoshift.preprocess import redimensionar_por_geometria, preparar_entrada
 from pneumoshift.metrics import CLASS_NAMES
 
 # --- Configuracao ---
-BASE = "aleatorio"     # "aleatorio" | "cxray" | "rsna"
+BASE = "rsna"     # "aleatorio" | "cxray" | "rsna"
 CLASSE = "aleatorio"   # "aleatorio" | "PNEUMONIA" | "NORMAL"
+GEOMETRIA = "padding"  # geometria aplicada no pre-processamento: "padding" ou "esticar"
 BASES_VALIDAS = ("cxray", "rsna")   # sorteaveis quando BASE == "aleatorio"
 MOSTRAR_GRADCAM = True
 SALVAR_SAIDA = True
@@ -37,7 +38,7 @@ def main():
     model = load_model(str(paths.MODELO), compile=False)
 
     base = random.choice(BASES_VALIDAS) if BASE.lower() == "aleatorio" else BASE
-    pasta_teste = paths.DADOS_TESTE / base
+    pasta_teste = paths.pasta_dados(base)
     if not pasta_teste.is_dir():
         raise FileNotFoundError(f"Pasta da base nao encontrada: {pasta_teste}")
 
@@ -56,7 +57,7 @@ def main():
     print(f"Base: {base}  |  Classe real: {pasta_escolhida}  |  Arquivo: {imagem_escolhida}")
 
     img = cv2.imread(str(caminho_imagem))
-    img_224 = redimensionar(img)
+    img_224 = redimensionar_por_geometria(img, GEOMETRIA)
     entrada = preparar_entrada(img_224)
 
     prediction = model.predict(entrada)

@@ -39,12 +39,15 @@ N_NORMAL = 50
 N_PNEUMONIA = 50
 MARGEM = 0.18                  # espessura da moldura de periferia (fracao de cada lado)
 
-TEST_DIR = paths.pasta_dados(BASE, GEOMETRIA)
-PREPROC = "esticar" if BASE == "rsna" else GEOMETRIA   # rsna: no-op; cxray: aplica
+# PNGs/JPEGs no tamanho original em ambas as bases; a geometria e aplicada aqui
+# (pipeline novo), identica para cxray e rsna. RSNA usa o pool de teste.
+TEST_DIR = paths.pasta_dados(BASE)
+PREPROC = GEOMETRIA
 
-# Grava dentro da execucao mais recente daquela base/geometria, subpasta gradcam/.
-_exec = paths.execucao_mais_recente(BASE, GEOMETRIA) or paths.nova_execucao(BASE, GEOMETRIA)
-OUT_DIR = _exec / "gradcam"
+# Saida ISOLADA em resultados/gradcam/<base>_<geometria>_<timestamp>/ (mesmo caminho das
+# imagens do gradcam_lote), separada das pastas de execucao do avaliar_lote.
+from datetime import datetime as _dt
+OUT_DIR = paths.RESULTADOS / "gradcam" / f"{BASE}_{GEOMETRIA}_{_dt.now():%Y%m%d-%H%M%S}"
 
 
 def mascara_conteudo(img_gray):
