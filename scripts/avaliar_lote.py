@@ -1,109 +1,63 @@
 """
 Avaliacao em lote do classificador de pneumonia (modelo Keras .h5).
 
-Roda uma vez por base sobre o conjunto de teste completo e pareado:
+Roda uma vez por base sobre o conjunto de teste pareado:
     Kaggle (Chest X-Ray, pediatrico) -> 234 normais + 390 pneumonia
     RSNA   (adulto, convertido)      -> 234 normais + 390 pneumonia
 
-O pareamento (mesma quantidade e proporcao nas duas bases) isola a variavel
-"origem dos dados" e mantem a comparacao com Shao (2021), que avaliou o mesmo
-conjunto de teste do Kaggle (234/390).
+O pareamento (mesma quantidade e proporcao) mantem constante a variavel "origem dos
+dados". A amostra 234/390 corresponde ao conjunto de teste do Kaggle usado por Shao (2021).
 
-Para cada imagem grava-se o score da classe pneumonia, usado no calculo do AUC.
-As metricas (acuracia, precisao, sensibilidade, especificidade, F1 e AUC) sao
-derivadas da matriz de confusao.
+Para cada imagem grava-se o score da classe pneumonia (usado no AUC). As metricas
+derivam da matriz de confusao.
+
+Uso:
+    python scripts/avaliar_lote.py      (ajuste FONTE no topo)
 """
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 import csv
-import random
 
 import cv2
 import numpy as np
 from keras.models import load_model
 
+from pneumoshift import paths
+from pneumoshift.preprocess import redimensionar, preparar_entrada
+from pneumoshift.data import selecionar, N_NORMAL, N_PNEUMONIA
+from pneumoshift.metrics import metricas_confusao, auc_mann_whitney, CLASS_NAMES
+
 # --- Configuracao ---
 FONTE = "rsna"                 # "kaggle" ou "rsna"
-IMG_SIZE = (224, 224)
 BATCH_SIZE = 100
-SEED = 42
-CLASS_NAMES = ["pneumonia", "normal"]   # ordem da saida do modelo (indice 0 = pneumonia)
+LIMIAR_ALT = 0.9994              # limiar alternativo, apenas ilustrativo
 
-# Amostra pareada entre as bases, seguindo Shao (2021).
-N_NORMAL = 234
-N_PNEUMONIA = 390
-LIMIAR_ALT = 0.95              # limiar alternativo, apenas ilustrativo
-
-# --- Caminhos (raiz do projeto = pasta acima de src/) ---
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "modelo" / "keras_model.h5"
-RESULTS_DIR = BASE_DIR / "resultados" / "csv"
-TEST_DIR = BASE_DIR / "dados" / "test" / FONTE
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-if not MODEL_PATH.exists():
-    raise FileNotFoundError(f"Modelo nao encontrado: {MODEL_PATH}")
+TEST_DIR = paths.DADOS_TESTE / FONTE
+RESULTS_DIR = paths.RESULTADOS / "csv"
 
 
 def proximo_arquivo_saida():
-    """Retorna um nome de CSV ainda inexistente (resultados_<fonte>_<n>.csv)."""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     n = 1
     while (RESULTS_DIR / f"resultados_{FONTE}_{n}.csv").exists():
         n += 1
     return RESULTS_DIR / f"resultados_{FONTE}_{n}.csv"
 
 
-def listar_imagens(folder):
-    """Lista os arquivos de imagem (jpeg/jpg/png) de uma pasta."""
-    return [f.name for f in Path(folder).iterdir()
-            if f.suffix.lower() in (".jpeg", ".jpg", ".png")]
-
-
-def selecionar(folder, n):
-    """Sorteia n arquivos de forma reprodutivel (semente fixa)."""
-    arquivos = listar_imagens(folder)
-    random.seed(SEED)
-    random.shuffle(arquivos)
-    if len(arquivos) < n:
-        print(f"  ATENCAO: '{folder.name}' tem {len(arquivos)} imagens (pedido: {n}). Usando todas.")
-        return arquivos
-    return arquivos[:n]
-
-
 def carregar_imagens(folder, file_names):
-    """Le e pre-processa as imagens (resize 224x224, normalizacao para [-1, 1])."""
+    """Le e pre-processa as imagens (padding letterbox + normalizacao [-1, 1])."""
     images, nomes = [], []
     for file_name in file_names:
         img = cv2.imread(str(Path(folder) / file_name))
         if img is None:
             print(f"  Erro ao carregar {file_name}, pulando...")
             continue
-        img_resized = cv2.resize(img, IMG_SIZE)
-        img_array = (np.asarray(img_resized, dtype=np.float32) / 127.5) - 1
-        images.append(img_array)
+        images.append(preparar_entrada(redimensionar(img))[0])
         nomes.append(file_name)
     return np.array(images), nomes
-
-
-def metricas_confusao(tp, tn, fp, fn):
-    """Calcula as metricas basicas a partir da matriz de confusao."""
-    total = tp + tn + fp + fn
-    acc = (tp + tn) / total if total else 0
-    precision = tp / (tp + fp) if (tp + fp) else 0
-    recall = tp / (tp + fn) if (tp + fn) else 0            # sensibilidade
-    specificity = tn / (tn + fp) if (tn + fp) else 0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0
-    return acc, precision, recall, specificity, f1
-
-
-def auc_mann_whitney(y_true, y_score):
-    """AUC pela estatistica de Mann-Whitney sobre os scores (equivale a area sob a ROC)."""
-    pos = [s for t, s in zip(y_true, y_score) if t == 1]
-    neg = [s for t, s in zip(y_true, y_score) if t == 0]
-    if not pos or not neg:
-        return 0.0
-    wins = sum(1.0 if ps > ns else 0.5 if ps == ns else 0.0
-               for ps in pos for ns in neg)
-    return wins / (len(pos) * len(neg))
 
 
 def avaliar(model, writer):
@@ -159,22 +113,18 @@ def avaliar(model, writer):
     print(f" F1-Score:       {f1*100:.2f}%")
     print(f" AUC:            {auc:.4f}")
 
-    # Metricas para um limiar alternativo, reaproveitando os scores ja coletados.
+    # Limiar alternativo, reaproveitando os scores.
     tp2 = sum(t == 1 and s >= LIMIAR_ALT for t, s in zip(y_true, y_score))
-    fn2 = sum(t == 1 and s <  LIMIAR_ALT for t, s in zip(y_true, y_score))
+    fn2 = sum(t == 1 and s < LIMIAR_ALT for t, s in zip(y_true, y_score))
     fp2 = sum(t == 0 and s >= LIMIAR_ALT for t, s in zip(y_true, y_score))
-    tn2 = sum(t == 0 and s <  LIMIAR_ALT for t, s in zip(y_true, y_score))
+    tn2 = sum(t == 0 and s < LIMIAR_ALT for t, s in zip(y_true, y_score))
     acc2, precision2, recall2, specificity2, f12 = metricas_confusao(tp2, tn2, fp2, fn2)
 
     print(f"\nAnalise de limiar (limiar = {LIMIAR_ALT}):")
     print(f"TP={tp2} TN={tn2} FP={fp2} FN={fn2}")
     print(f" Acuracia:       {acc2*100:.2f}%")
-    print(f" Precisao:       {precision2*100:.2f}%")
-    print(f" Sensibilidade:  {recall2*100:.2f}%")
     print(f" Especificidade: {specificity2*100:.2f}%")
-    print(f" F1-Score:       {f12*100:.2f}%")
 
-    # Resumo no CSV
     writer.writerow([])
     writer.writerow(["Resumo"])
     writer.writerow(["TP", "TN", "FP", "FN"])
@@ -205,8 +155,8 @@ def avaliar(model, writer):
 
 
 def main():
-    model = load_model(str(MODEL_PATH), compile=False)
-    print(f"Modelo carregado de: {MODEL_PATH}")
+    model = load_model(str(paths.MODELO), compile=False)
+    print(f"Modelo carregado de: {paths.MODELO}")
     print(f"Fonte: {FONTE}  |  base: {TEST_DIR}")
 
     results_file = proximo_arquivo_saida()

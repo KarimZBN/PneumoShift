@@ -36,29 +36,43 @@ Portanto, a classe negativa do RSNA não é equivalente à classe normal do Kagg
 
 ## Passo a passo
 
+Os scripts ficam em `scripts/` e importam o pacote em `src/pneumoshift/`. Rode-os a
+partir da raiz do projeto (os caminhos são resolvidos automaticamente).
+
 1. **Converter o RSNA (DICOM → PNG):**
 
    ```
-   python src/converter_rsna.py
+   python scripts/converter_rsna.py
    ```
 
    Sorteia, de forma reprodutível (`SEED = 13`), imagens de cada classe e as
-   grava em `dados/test/rsna/`.
+   grava em `dados/test/rsna/`. Para a variante com padding letterbox aplicado na
+   conversão, use `python scripts/converter_rsna_padding.py` (grava em `dados/test/rsna_padding/`).
 
 2. **Avaliar uma base em lote:**
 
    ```
-   python src/main_batch.py
+   python scripts/avaliar_lote.py
    ```
 
    Ajuste `FONTE` para `"kaggle"` ou `"rsna"` no início do arquivo. A avaliação
    usa uma amostra pareada de 234 normais + 390 pneumonia (`SEED = 42`), gravando
    um CSV em `resultados/csv/` com a predição por imagem e o resumo das métricas.
 
-3. **Classificar uma única imagem (demonstração visual):**
+3. **Classificar uma única imagem (demonstração + Grad-CAM):**
 
    ```
-   python src/main.py
+   python scripts/demo_imagem.py
+   ```
+
+4. **Explicabilidade e verificações (opcional):**
+
+   ```
+   python scripts/gradcam_lote.py        # Grad-CAM em lote por categoria
+   python scripts/analise_foco.py        # foco do Grad-CAM (periferia x miolo)
+   python scripts/inspecionar_dicom.py   # metadados DICOM
+   python scripts/comparar_dicom_png.py  # orientacao DICOM x PNG + aspect ratio
+   python tests/test_gradcam.py          # valida o Grad-CAM
    ```
 
 ## Reprodutibilidade
