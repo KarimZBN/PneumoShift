@@ -23,7 +23,7 @@ from pneumoshift.preprocess import redimensionar, preparar_entrada
 
 def uma_imagem():
     """Primeira imagem disponivel em qualquer base/classe, para o teste."""
-    for fonte in ("kaggle", "rsna"):
+    for fonte in ("cxray", "rsna"):
         for classe in ("PNEUMONIA", "NORMAL"):
             d = paths.DADOS_TESTE / fonte / classe
             if d.is_dir():

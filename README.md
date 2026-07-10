@@ -21,7 +21,8 @@ src/pneumoshift/          Pacote com o codigo reutilizavel
 scripts/                  Executaveis (o que se roda)
   converter_rsna.py         DICOM -> PNG (resize direto)         [dados/test/rsna]
   converter_rsna_padding.py DICOM -> PNG (padding letterbox)     [dados/test/rsna_padding]
-  avaliar_lote.py           Avaliacao em lote de uma base -> CSV de metricas
+  avaliar_lote.py           Avalia uma execucao (base+geometria) -> predicoes.csv + metricas.json
+  analise_estatistica.py    AUC/calibracao/IC bootstrap + figuras (individuais e comparativas)
   demo_imagem.py            Classifica 1 imagem + Grad-CAM (inspecao visual)
   gradcam_lote.py           Grad-CAM em lote por categoria (VP/VN/FP/FN)
   analise_foco.py           Mede foco do Grad-CAM (periferia x miolo) por categoria
@@ -31,13 +32,21 @@ scripts/                  Executaveis (o que se roda)
 tests/
   test_gradcam.py           Valida que o Grad-CAM opera sobre o forward correto
 
+resultados/               Saidas por execucao (nao versionadas; so a estrutura via .gitkeep)
+  <base>_<geometria>/       kaggle_padding, kaggle_esticar, rsna_padding, rsna_esticar
+                            -> predicoes.csv, metricas.json, roc.png, calibracao.png, gradcam/
+  _comparacoes/dominio/     kaggle vs rsna (padding) -> domain shift
+  _comparacoes/geometria/   padding vs esticar por base -> item #4
+
 modelo/keras_model.h5     Modelo pre-treinado avaliado
 requirements.txt          Dependencias
 REPRODUCAO.md             Guia passo a passo
 ```
 
-Não versionados (ver `.gitignore`): `dados/` (imagens, baixadas à parte) e
-`resultados/` (CSVs e figuras gerados pela execução).
+Não versionados (ver `.gitignore`): `dados/` (imagens, baixadas à parte) e o conteúdo de
+`resultados/` (CSVs e figuras gerados pela execução ficam local/nuvem). Apenas a **estrutura
+de pastas** de `resultados/` é preservada no repositório (arquivos `.gitkeep`), documentando
+a convenção `<base>_<geometria>` — cada execução tem sua pasta autocontida.
 
 ## Componentes
 

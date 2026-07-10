@@ -24,9 +24,9 @@ from pneumoshift.preprocess import redimensionar, preparar_entrada
 from pneumoshift.metrics import CLASS_NAMES
 
 # --- Configuracao ---
-BASE = "aleatorio"     # "aleatorio" | "kaggle" | "rsna"
+BASE = "aleatorio"     # "aleatorio" | "cxray" | "rsna"
 CLASSE = "aleatorio"   # "aleatorio" | "PNEUMONIA" | "NORMAL"
-BASES_VALIDAS = ("kaggle", "rsna")   # sorteaveis quando BASE == "aleatorio"
+BASES_VALIDAS = ("cxray", "rsna")   # sorteaveis quando BASE == "aleatorio"
 MOSTRAR_GRADCAM = True
 SALVAR_SAIDA = True
 

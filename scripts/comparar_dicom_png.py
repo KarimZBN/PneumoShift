@@ -38,7 +38,7 @@ TOL_QUADRADO = 0.02        # tolerancia p/ considerar "quadrado" (|AR-1| <= tol)
 # --- Caminhos ---
 DICOM_DIR = paths.DADOS / "raw" / "rsna" / "stage_2_train_images"
 PNG_RSNA_DIR = paths.DADOS_TESTE / "rsna"          # {NORMAL,PNEUMONIA}/*.png
-KAGGLE_DIR = paths.DADOS_TESTE / "kaggle"          # {NORMAL,PNEUMONIA}/*.jpeg
+KAGGLE_DIR = paths.DADOS_TESTE / "cxray"          # {NORMAL,PNEUMONIA}/*.jpeg
 RESULTS_DIR = paths.RESULTADOS / "csv"
 
 

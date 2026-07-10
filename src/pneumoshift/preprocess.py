@@ -26,6 +26,26 @@ def redimensionar(img, size=IMG_SIZE):
                               borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
 
+def esticar(img, size=IMG_SIZE):
+    """Redimensiona para `size` por resize direto (deforma a proporcao).
+
+    Comportamento alternativo ao padding, usado na analise de sensibilidade da
+    geometria. Interpolacao: INTER_AREA na reducao, INTER_LINEAR na ampliacao.
+    """
+    h, w = img.shape[:2]
+    interp = cv2.INTER_AREA if (w > size[0] or h > size[1]) else cv2.INTER_LINEAR
+    return cv2.resize(img, size, interpolation=interp)
+
+
+def redimensionar_por_geometria(img, geometria, size=IMG_SIZE):
+    """Aplica padding (letterbox) ou esticar conforme a geometria escolhida."""
+    if geometria == "padding":
+        return redimensionar(img, size)
+    if geometria == "esticar":
+        return esticar(img, size)
+    raise ValueError(f"geometria invalida: {geometria!r} (use 'padding' ou 'esticar').")
+
+
 def preparar_entrada(img_bgr):
     """Converte uma imagem BGR (ja redimensionada) no tensor de entrada do modelo.
 

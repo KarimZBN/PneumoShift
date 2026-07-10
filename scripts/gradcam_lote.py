@@ -7,11 +7,11 @@ e gera o overlay Grad-CAM; por padrao o foco e nos ERROS (FP/FN), com um numero
 configuravel de acertos para comparacao.
 
 Saida:
-    resultados/gradcam_lote/<FONTE>/<CATEGORIA>/<arquivo>.png
-    resultados/gradcam_lote/<FONTE>/indice.csv
+    resultados/<base>/<geometria>_<ts>_seed<N>/gradcam/<CATEGORIA>/<arquivo>.png
+    resultados/<base>/<geometria>_<ts>_seed<N>/gradcam/indice.csv
 
 Uso:
-    python scripts/gradcam_lote.py      (ajuste FONTE e LIMITES no topo)
+    python scripts/gradcam_lote.py      (ajuste BASE/GEOMETRIA e LIMITES no topo)
 """
 import sys
 from pathlib import Path
@@ -25,19 +25,26 @@ import numpy as np
 from keras.models import load_model
 
 from pneumoshift import paths, gradcam
-from pneumoshift.preprocess import redimensionar, preparar_entrada
+from pneumoshift.preprocess import redimensionar_por_geometria, preparar_entrada
 from pneumoshift.data import selecionar
 from pneumoshift.metrics import categoria, CLASS_NAMES, LIMIAR
 
+
 # --- Configuracao ---
-FONTE = "kaggle"               # "kaggle" ou "rsna"
+BASE = "cxray"                  # "cxray" ou "rsna"
+GEOMETRIA = "padding"          # "padding" ou "esticar"
 N_NORMAL = 50
 N_PNEUMONIA = 50
 # Quantos overlays gerar por categoria (0 = nenhum, None = todos). Foco nos erros.
 LIMITES = {"FP": None, "FN": None, "VP": 15, "VN": 15}
 
-TEST_DIR = paths.DADOS_TESTE / FONTE
-OUT_DIR = paths.RESULTADOS / "gradcam_lote" / FONTE
+TEST_DIR = paths.pasta_dados(BASE, GEOMETRIA)
+PREPROC = "esticar" if BASE == "rsna" else GEOMETRIA   # rsna: no-op; cxray: aplica
+
+# Grava dentro da execucao mais recente daquela base/geometria (a que avaliar_lote criou),
+# subpasta gradcam/. Se nenhuma existir, cria uma execucao nova.
+_exec = paths.execucao_mais_recente(BASE, GEOMETRIA) or paths.nova_execucao(BASE, GEOMETRIA)
+OUT_DIR = _exec / "gradcam"
 
 
 def main():
@@ -59,7 +66,7 @@ def main():
             img = cv2.imread(str(folder / nome))
             if img is None:
                 continue
-            img224 = redimensionar(img)
+            img224 = redimensionar_por_geometria(img, PREPROC)
             entrada = preparar_entrada(img224)
 
             pred = model.predict(entrada, verbose=0)[0]
@@ -83,7 +90,7 @@ def main():
         w.writerow(["arquivo", "classe_real", "classe_predita", "score_pneumonia", "categoria"])
         w.writerows(linhas)
 
-    print(f"Fonte: {FONTE}")
+    print(f"Execucao: {BASE}_{GEOMETRIA}")
     print(f"Contagem por categoria: {contagem}")
     print(f"Overlays gerados:       {gerados}")
     print(f"Saida: {OUT_DIR}")

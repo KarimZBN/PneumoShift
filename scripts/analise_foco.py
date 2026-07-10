@@ -9,11 +9,11 @@ LIMITACAO: "periferia" e geometrica, nao anatomica; nao afirma "fora do pulmao",
 "na moldura externa da imagem".
 
 Saida:
-    resultados/foco_objetivo/<FONTE>_foco.csv     (uma linha por imagem)
-    resultados/foco_objetivo/<FONTE>_resumo.csv   (media por categoria)
+    resultados/<base>/<geometria>_<ts>_seed<N>/gradcam/foco.csv        (por imagem)
+    resultados/<base>/<geometria>_<ts>_seed<N>/gradcam/foco_resumo.csv (por categoria)
 
 Uso:
-    python scripts/analise_foco.py      (ajuste FONTE no topo)
+    python scripts/analise_foco.py      (ajuste BASE/GEOMETRIA no topo)
 """
 import sys
 from pathlib import Path
@@ -27,18 +27,24 @@ import numpy as np
 from keras.models import load_model
 
 from pneumoshift import paths, gradcam
-from pneumoshift.preprocess import redimensionar, preparar_entrada
+from pneumoshift.preprocess import redimensionar_por_geometria, preparar_entrada
 from pneumoshift.data import selecionar
 from pneumoshift.metrics import categoria, LIMIAR
 
+
 # --- Configuracao ---
-FONTE = "kaggle"               # "kaggle" ou "rsna"
+BASE = "cxray"                  # "cxray" ou "rsna"
+GEOMETRIA = "padding"          # "padding" ou "esticar"
 N_NORMAL = 50
 N_PNEUMONIA = 50
 MARGEM = 0.18                  # espessura da moldura de periferia (fracao de cada lado)
 
-TEST_DIR = paths.DADOS_TESTE / FONTE
-OUT_DIR = paths.RESULTADOS / "foco_objetivo"
+TEST_DIR = paths.pasta_dados(BASE, GEOMETRIA)
+PREPROC = "esticar" if BASE == "rsna" else GEOMETRIA   # rsna: no-op; cxray: aplica
+
+# Grava dentro da execucao mais recente daquela base/geometria, subpasta gradcam/.
+_exec = paths.execucao_mais_recente(BASE, GEOMETRIA) or paths.nova_execucao(BASE, GEOMETRIA)
+OUT_DIR = _exec / "gradcam"
 
 
 def mascara_conteudo(img_gray):
@@ -85,7 +91,7 @@ def main():
             img = cv2.imread(str(folder / nome))
             if img is None:
                 continue
-            img224 = redimensionar(img)
+            img224 = redimensionar_por_geometria(img, PREPROC)
             gray = cv2.cvtColor(img224, cv2.COLOR_BGR2GRAY)
             entrada = preparar_entrada(img224)
 
@@ -100,17 +106,17 @@ def main():
             linhas.append([nome, label, cat, f"{fp_:.4f}", f"{fm_:.4f}", pk_])
             por_cat.setdefault(cat, []).append((fp_, fm_, pk_))
 
-    with open(OUT_DIR / f"{FONTE}_foco.csv", "w", newline="", encoding="utf-8-sig") as f:
+    with open(OUT_DIR / "foco.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["arquivo", "classe_real", "categoria",
                     "frac_periferia", "frac_miolo", "pico_na_periferia"])
         w.writerows(linhas)
 
-    with open(OUT_DIR / f"{FONTE}_resumo.csv", "w", newline="", encoding="utf-8-sig") as f:
+    with open(OUT_DIR / "foco_resumo.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["categoria", "n", "media_frac_periferia", "media_frac_miolo",
                     "pct_pico_na_periferia"])
-        print(f"\nFonte: {FONTE}  (moldura de periferia = {MARGEM:.0%} de cada lado)")
+        print(f"\nExecucao: {BASE}_{GEOMETRIA}  (moldura de periferia = {MARGEM:.0%} de cada lado)")
         print(f"{'cat':4s} {'n':>4s} {'periferia':>10s} {'miolo':>8s} {'pico_perif':>11s}")
         for cat in ("VP", "VN", "FP", "FN"):
             vals = por_cat.get(cat, [])
@@ -121,7 +127,7 @@ def main():
             w.writerow([cat, len(vals), f"{mp:.4f}", f"{mm:.4f}", f"{pk:.1f}"])
             print(f"{cat:4s} {len(vals):4d} {mp:10.3f} {mm:8.3f} {pk:10.1f}%")
 
-    print(f"\nSaida: {OUT_DIR}/{FONTE}_foco.csv e {FONTE}_resumo.csv")
+    print(f"\nSaida: {OUT_DIR}/foco.csv e foco_resumo.csv")
     print("Nota: 'periferia' e geometrica (moldura externa), nao anatomica.")
 
 

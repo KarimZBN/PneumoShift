@@ -1,7 +1,9 @@
 # Dados (grandes / externos — ver README para download e conversão)
 dados/
 
-# Resultados de execução (não versionados)
+# Resultados de execução: NÃO versiona os arquivos (CSVs, figuras — ficam local/nuvem).
+# A estrutura de pastas é preservada no repositório por arquivos .gitkeep, adicionados
+# manualmente com: git add -f resultados/**/.gitkeep
 resultados/
 
 # Python
