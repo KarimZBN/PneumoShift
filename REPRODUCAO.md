@@ -8,8 +8,10 @@ Passo a passo para reproduzir a avaliação descrita no [README](README.md).
 pip install -r requirements.txt
 ```
 
-Ambiente de referência: Python 3.10, TensorFlow/Keras 2.12, OpenCV, NumPy
-1.23.5 e pydicom (para a conversão do RSNA).
+Ambiente de referência: Python 3.11, com as versões fixadas em `requirements.txt`
+(TensorFlow/Keras 2.12.0, NumPy 1.23.5, OpenCV 4.11.0.86, scikit-learn 1.3.2,
+matplotlib 3.7.5, pydicom 3.0.2). Detalhes de hardware e bibliotecas na seção
+[Ambiente computacional](#ambiente-computacional).
 
 ## Dados
 
@@ -119,6 +121,24 @@ partir da raiz do projeto (os caminhos são resolvidos automaticamente).
 - O modelo apenas realiza inferência, sem qualquer reajuste de pesos, o que
   garante saídas idênticas entre execuções.
 
+### Ambiente computacional
+
+Os experimentos foram conduzidos em um notebook equipado com processador **AMD Ryzen 7
+6800H**, **16 GB de memória RAM** e placa gráfica **NVIDIA GeForce RTX 3070 Ti**, com
+implementação em **Python 3.11**.
+
+O carregamento e a inferência do modelo Keras (`.h5`) apoiaram-se nas bibliotecas
+**TensorFlow** e **Keras** (versão 2.12.0); o tratamento numérico das imagens utilizou a
+**NumPy** (versão 1.23.5); a leitura e o redimensionamento das radiografias, a **OpenCV**
+(versão 4.11.0.86); e a conversão da base RSNA, a **pydicom** (versão 3.0.2, com
+`pylibjpeg` para os DICOM comprimidos). Cabe registrar que a versão do TensorFlow adotada
+requer a série NumPy 1.x, condição observada na configuração do ambiente.
+
+As análises estatísticas incorporadas na reestruturação (AUC, calibração, intervalos de
+confiança por bootstrap e curvas) utilizam o **scikit-learn** (versão 1.3.2), e as figuras
+(ROC, calibração) são geradas com o **matplotlib** (versão 3.7.5). As versões completas e
+fixadas de todas as dependências estão em [`requirements.txt`](requirements.txt).
+
 ## Nota aos orientadores — reproduzindo e relacionando os números da devolutiva
 
 Esta seção mostra como chegar aos números da devolutiva a partir do código atual. A
@@ -172,4 +192,3 @@ mantém `INTER_AREA` por ser tecnicamente superior na redução.
 > e para a análise de sensibilidade da geometria.
 
 Uma nota final: o passo `kaggle` acima refere-se à base **Chest X-Ray** (`BASE = "cxray"`).
-                                                                                                                                                               
