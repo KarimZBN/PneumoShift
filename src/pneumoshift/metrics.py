@@ -90,11 +90,3 @@ def metricas_por_limiar(y_true, y_score, limiar=LIMIAR):
             "acuracia": acc, "sensibilidade": recall,
             "especificidade": specificity, "f1": f1}
 
-
-def youden(y_true, y_score):
-    """Limiar otimo pelo indice de Youden (max sensibilidade+especificidade-1) sobre a ROC."""
-    from sklearn.metrics import roc_curve
-    import numpy as np
-    fpr, tpr, thr = roc_curve(y_true, y_score)
-    j = tpr - fpr
-    return float(thr[int(np.argmax(j))])

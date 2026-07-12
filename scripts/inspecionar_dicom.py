@@ -35,7 +35,7 @@ N_ALEATORIOS = 1500        # sorteados do restante (dispersao)
 
 # --- Caminhos ---
 IMAGES_DIR = paths.DADOS / "raw" / "rsna" / "stage_2_train_images"
-RESULTS_DIR = paths.RESULTADOS / "csv"
+RESULTS_DIR = paths.RESULTADOS / "APOIO_provas-dicom"
 OUT_CSV = RESULTS_DIR / "inspecao_dicom.csv"
 
 
@@ -51,7 +51,7 @@ def selecionar_arquivos():
     random.shuffle(resto)
     aleatorios = resto[:N_ALEATORIOS]
 
-    # Uniao preservando rastreabilidade da origem (para o CSV).
+    # Marca a origem (sequencial/aleatorio) de cada arquivo no CSV.
     escolhidos = [(nome, "sequencial") for nome in sequenciais]
     escolhidos += [(nome, "aleatorio") for nome in aleatorios]
     return escolhidos

@@ -19,107 +19,135 @@ Os conjuntos são públicos e devem ser baixados diretamente das fontes:
 
 - **Kaggle — Chest X-Ray Images (Pneumonia):** conjunto de teste pediátrico
   (234 normais + 390 pneumonia), o mesmo utilizado por Shao (2021).
-- **RSNA Pneumonia Detection Challenge:** imagens em DICOM de pacientes
-  adultos, com os rótulos em `stage_2_train_labels.csv`.
+- **RSNA Pneumonia Detection Challenge:** imagens em DICOM de pacientes adultos, com os
+  rótulos em `stage_2_train_labels.csv`.
 
-Estrutura esperada após o download:
+Estrutura esperada:
 
 ```
 dados/
   raw/rsna/stage_2_train_images/*.dcm
   raw/rsna/stage_2_train_labels.csv
   test/cxray/{NORMAL,PNEUMONIA}/*.jpeg
-  test/rsna_pool/{NORMAL,PNEUMONIA}/*.png        (gerado pela conversão — teste)
-  test/rsna_validacao/{NORMAL,PNEUMONIA}/*.png   (gerado pela conversão — limiar)
-  splits/{validacao,pool_teste}.csv              (gerado por split_rsna.py)
+  processed/rsna/{NORMAL,PNEUMONIA}/*.png     (gerado pela conversão; + scores_por_id.csv)
+  splits/rsna_{balanceado,pareado}_seed<N>.csv  (gerado por split_rsna.py)
 ```
 
-Observação sobre os rótulos do RSNA: `Target = 0` indica **ausência de anotação
-de opacidade compatível com pneumonia**, e não necessariamente um exame normal.
-Portanto, a classe negativa do RSNA não é equivalente à classe normal do Kaggle.
+Observação sobre os rótulos do RSNA: `Target = 0` indica **ausência de anotação de
+opacidade compatível com pneumonia**, e não necessariamente um exame normal. Portanto, a
+classe negativa do RSNA não é equivalente à classe normal do Kaggle. Cada paciente = uma
+imagem; os rótulos são agregados por `patientId` antes de contar/converter (as 30.227
+linhas do CSV são *bounding boxes*). Elegíveis: 6.012 pneumonia + 20.672 normal = 26.684,
+0 ambíguos.
 
 ## Passo a passo
 
-Os scripts ficam em `scripts/` e importam o pacote em `src/pneumoshift/`. Rode-os a
-partir da raiz do projeto (os caminhos são resolvidos automaticamente).
+Rode da raiz do projeto (os caminhos são resolvidos automaticamente). A ordem importa: a
+avaliação da base inteira **gera o cache de scores** que o split e as avaliações de
+subconjunto consomem.
 
-1. **Separar o RSNA em validação e teste (sem vazamento):**
+### 1. Converter a base RSNA inteira (DICOM → PNG)
 
-   ```
-   python scripts/split_rsna.py
-   ```
+```
+python scripts/converter_rsna.py
+```
 
-   Particiona os pacientes do RSNA de forma reprodutível (`SEED_SPLIT = 20260710`) em um
-   conjunto de **validação** (define o limiar) e um **pool de teste** (as rodadas amostram
-   dele), sem sobreposição entre eles. Grava as listas em `dados/splits/`.
+Converte todos os 26.684 pacientes elegíveis (agregados por `patientId`) para
+`dados/processed/rsna/{NORMAL,PNEUMONIA}/`, **no tamanho original** (só normaliza 0–255). A
+geometria não é fixada no disco — é aplicada no pré-processamento da inferência.
 
-2. **Converter o RSNA (DICOM → PNG):**
+### 2. Avaliação PRINCIPAL: base inteira (gera o cache)
 
-   ```
-   python scripts/converter_rsna.py
-   ```
+```
+python scripts/avaliar_rsna_completa.py
+```
 
-   Lê os splits e converte exatamente os pacientes selecionados, gravando os PNGs **no
-   tamanho original** em `dados/test/rsna_validacao/` e `dados/test/rsna_pool/`. A geometria
-   (padding/esticar) não é fixada no disco — é aplicada no pré-processamento da inferência.
+Avalia toda a base (distribuição real das classes), limiar 0,5. Reporta sensibilidade,
+especificidade, AUC, Brier, precisão e curva de calibração, com IC 95% por bootstrap
+(unidade = paciente) e conferência manual das métricas a partir da matriz. Salva em
+`resultados/PRINCIPAL_rsna-base-inteira/` e grava o cache
+`dados/processed/rsna/scores_por_id.csv` (usado nos passos 3–5).
 
-3. **Avaliar uma execução (base + geometria):**
+### 3. Gerar as seleções amostradas (CSVs, sem copiar imagens)
 
-   ```
-   python scripts/avaliar_lote.py
-   ```
+```
+python scripts/split_rsna.py
+```
 
-   Ajuste `BASE` (`"cxray"`/`"rsna"`) e `GEOMETRIA` (`"padding"`/`"esticar"`) no início do
-   arquivo. Cada execução grava sua própria pasta com timestamp em
-   `resultados/<base>/<geometria>_<AAAAMMDD-HHMMSS>_seed<N>/` (nunca sobrescreve):
-   `predicoes.csv` (resumo no topo + predição por imagem, score cru), `metricas.json` e, ao
-   final, a estatística da execução (`metricas_estat.json`, `roc.png`, `calibracao.png`).
-   Repita para as 4 combinações (cxray/rsna × padding/esticar) para o conjunto completo.
+A partir da base convertida, grava em `dados/splits/` os CSVs de identificadores por
+semente: **balanceado 1:1** (todos os positivos + iguais negativos) e **pareado à Chest
+X-Ray** (390 pneumonia + 234 normal). Não copia PNGs.
 
-4. **Limiar em validação separada + múltiplas rodadas (RSNA):**
+### 4. Avaliação de apoio: balanceado 1:1 (controla a proporção)
 
-   ```
-   python scripts/avaliar_rsna_rodadas.py
-   ```
+```
+python scripts/avaliar_rsna_balanceado.py
+```
 
-   Define o limiar de Youden no conjunto de validação e o aplica ao pool de teste, repetindo
-   a amostragem pareada com várias sementes (`42..51`). Grava média ± desvio em
-   `resultados/rsna/rodadas_<timestamp>/`.
+Consulta o cache do passo 2 (sem reinferência), 10 sementes, limiar 0,5. Reporta média ±
+desvio e IC 95% entre as sementes em `resultados/APOIO_rsna-balanceado/`.
 
-5. **Análise estatística comparativa (AUC/calibração/IC + figuras):**
+### 5. Avaliação de apoio: pareado à Chest X-Ray
 
-   ```
-   python scripts/analise_estatistica.py
-   ```
+```
+python scripts/avaliar_rsna_pareado.py
+```
 
-   Lê a execução **mais recente** de cada `resultados/<base>/<geometria>_*/` e grava as
-   comparativas numa pasta única `resultados/_comparacoes/run_<timestamp>/` (domínio:
-   cxray×rsna; geometria: padding×esticar) mais o `resumo_geral.csv`.
+Igual ao anterior, mas com 390/234 (mesmo tamanho e proporção da base interna), para
+comparar as duas bases isolando a origem dos dados. Salva em
+`resultados/APOIO_rsna-pareado-cxray/`.
 
-6. **Explicabilidade e verificações:**
+### 6. Chest X-Ray (base interna)
 
-   ```
-   python scripts/gradcam_lote.py        # Grad-CAM em lote por categoria (VP/VN/FP/FN)
-   python scripts/analise_foco.py        # foco do Grad-CAM (periferia x miolo)
-   python scripts/demo_imagem.py         # classifica 1 imagem + Grad-CAM
-   python scripts/inspecionar_dicom.py   # metadados DICOM
-   python scripts/comparar_dicom_png.py  # orientacao DICOM x PNG + aspect ratio
-   python tests/test_gradcam.py          # valida o Grad-CAM
-   python tests/test_split.py            # valida que validacao e teste sao disjuntos
-   ```
+Em `scripts/avaliar_lote.py`, no topo: `BASE = "cxray"`, `GEOMETRIA = "padding"`.
 
-   O `gradcam_lote.py` e o `analise_foco.py` gravam em
-   `resultados/gradcam/<base>_<geometria>_<timestamp>/`.
+```
+python scripts/avaliar_lote.py
+```
+
+Avalia a amostra pareada (234 normais + 390 pneumonia). A estatística (IC bootstrap,
+calibração) é acrescentada ao `metricas.json` e as figuras vão para `imagens/`. Salva em
+`resultados/PRINCIPAL_cxray/`.
+
+> (Opcional, exploratório) Rodando também com `GEOMETRIA = "esticar"` gera
+> `resultados/DESCARTAVEL_cxray-esticar/`; depois `python scripts/analise_estatistica.py`
+> produz a comparação de geometria padding × esticar.
+
+### 7. Explicabilidade (Grad-CAM + foco)
+
+Em `scripts/gradcam_analise.py`, ajuste `BASE` e `GEOMETRIA` e rode:
+
+```
+python scripts/gradcam_analise.py
+```
+
+Numa passada, gera os overlays Grad-CAM por categoria (VP/VN/FP/FN), nomeados
+sequencialmente (`VP_001.png`, `FP_001.png`, ...), e mede o foco da ativação (periferia ×
+miolo). Salva em `resultados/APOIO_explicabilidade/<base>_<geometria>/`: os overlays, o
+`indice.csv` (nome sequencial → arquivo original, categoria, score, foco) e o
+`foco_resumo.csv` (média por categoria).
+
+### 8. Verificações do pipeline DICOM
+
+```
+python scripts/inspecionar_dicom.py     # metadados (conversão sem perdas)
+python scripts/comparar_dicom_png.py     # orientação DICOM × PNG + aspect ratio
+python tests/test_gradcam.py             # valida o Grad-CAM
+```
+
+Saem em `resultados/APOIO_provas-dicom/`.
 
 ## Reprodutibilidade
 
-- A partição e a seleção da amostra usam sementes fixas (`SEED_SPLIT = 20260710` na
-  separação validação/teste e `SEED = 42` na avaliação), com ordenação prévia dos arquivos
-  antes do embaralhamento. O `converter_rsna.py` apenas lê os splits, não sorteia.
-- O pareamento (mesma quantidade e proporção nas duas bases) isola a variável
-  "origem dos dados".
-- O modelo apenas realiza inferência, sem qualquer reajuste de pesos, o que
-  garante saídas idênticas entre execuções.
+- A seleção das amostras usa sementes fixas (`SEED = 42`; sementes `42..51` nas 10
+  repetições dos conjuntos balanceado e pareado), com ordenação prévia dos arquivos antes
+  do embaralhamento (independe da ordem do sistema de arquivos). O `converter_rsna.py` não
+  sorteia (converte a base inteira).
+- O modelo apenas realiza inferência, sem reajuste de pesos, o que garante saídas idênticas
+  entre execuções. Por isso, o cache de scores da base inteira produz, nos subconjuntos, os
+  mesmos valores que uma reinferência — sem o custo de rodar o modelo de novo.
+- Os scores são preservados sem arredondamento; as métricas via scikit-learn são conferidas
+  manualmente a partir da matriz de confusão.
 
 ### Ambiente computacional
 
@@ -134,49 +162,46 @@ O carregamento e a inferência do modelo Keras (`.h5`) apoiaram-se nas bibliotec
 `pylibjpeg` para os DICOM comprimidos). Cabe registrar que a versão do TensorFlow adotada
 requer a série NumPy 1.x, condição observada na configuração do ambiente.
 
-As análises estatísticas incorporadas na reestruturação (AUC, calibração, intervalos de
-confiança por bootstrap e curvas) utilizam o **scikit-learn** (versão 1.3.2), e as figuras
-(ROC, calibração) são geradas com o **matplotlib** (versão 3.7.5). As versões completas e
-fixadas de todas as dependências estão em [`requirements.txt`](requirements.txt).
+As análises estatísticas (AUC, calibração, intervalos de confiança por bootstrap e curvas)
+utilizam o **scikit-learn** (versão 1.3.2), e as figuras (ROC, calibração) são geradas com
+o **matplotlib** (versão 3.7.5). As versões completas estão em
+[`requirements.txt`](requirements.txt).
+
+> **Nota de implementação (avaliação da base inteira).** Avaliar as 26.684 imagens exige
+> processá-las em *streaming* por lotes: carregar as imagens todas de uma vez custaria
+> ~16 GB (26.684 × 224 × 224 × 3 × 4 bytes), inviável em 16 GB de RAM. A inferência carrega
+> um lote de cada vez, guarda apenas o escore por imagem e descarta o lote, mantendo o pico
+> de memória baixo independentemente do tamanho da base.
 
 ## Nota aos orientadores — reproduzindo e relacionando os números da devolutiva
 
 Esta seção mostra como chegar aos números da devolutiva a partir do código atual. A
-**reprodução exata é garantida na Chest X-Ray** (base interna, conjunto de teste fixo); na
-**RSNA** (base externa), a devolutiva pediu justamente ampliar a amostra / repetir a seleção,
-o que foi feito — por isso o valor de referência da RSNA mudou, e a nota documenta essa relação
-de forma transparente.
+**reprodução exata é garantida na Chest X-Ray** (base interna, conjunto de teste fixo). Na
+**RSNA** (base externa), a devolutiva pediu justamente avaliar toda a base e repetir a
+seleção com várias sementes — o que foi feito —, então o valor de referência mudou, e a
+nota documenta essa relação de forma transparente.
 
-| Métrica | Reportado na devolutiva | Pipeline atual (`esticar`) |
-|---|:---:|:---:|
-| AUC — Chest X-Ray (esticar) | 0,9469 (original) | 0,9358 → **0,9469** ao forçar `INTER_LINEAR` |
-| Brier — Chest X-Ray (esticar) | ~0,094 | 0,1310 |
-| AUC — RSNA (esticar) | 0,7320 (original) | 0,6798 (amostra ampliada) |
-| Brier — RSNA (esticar) | ~0,281 | 0,3257 |
+**RSNA — avaliação ampliada.** O valor original (AUC 0,7320) vinha de uma seleção única de
+624 imagens da conversão antiga. O pipeline atual avalia a **base inteira** (26.684
+pacientes, distribuição real) como resultado principal e, como apoio, **repete a seleção
+balanceada com 10 sementes** (média ± desvio). Como a conversão da versão da banca foi
+substituída por este pipeline, o 0,7320 não é reproduzível byte a byte; o número de
+referência da base externa passa a ser o das avaliações atuais.
 
-**RSNA (0,7320 → 0,6798): ampliação da amostra, atendendo à devolutiva.** O valor original
-vinha de uma seleção única de 624 imagens da conversão antiga. Atendendo ao pedido de avaliar
-mais dados / repetir a seleção, as imagens passaram a ser convertidas para um **pool de teste**
-maior, do qual a amostra pareada de 624 é sorteada. As **10 rodadas com sementes distintas**
-(`avaliar_rsna_rodadas.py`) dão AUC média de **0,69 ± 0,02** — ou seja, ~0,68 é o valor típico
-da base externa, e o 0,7320 correspondia a uma seleção pequena favorável. O resultado atual é
-mais robusto por repousar sobre mais dados e sobre a média de várias amostragens. Como a
-conversão da versão da banca foi substituída por este pipeline, o 0,7320 não é reproduzível
-byte a byte pelo código atual; o número de referência da base externa passa a ser o das rodadas.
+**Chest X-Ray — reprodução exata.** A versão atual (com `INTER_AREA`) dá AUC 0,9358, e o
+trabalho original reportava 0,9469. A causa foi investigada e **confirmada por reprodução
+direta**: é o método de **interpolação** do redimensionamento — **não** a amostra (as 624
+imagens são as mesmas nas duas versões, pois o conjunto de teste tem exatamente 234 + 390,
+então a seleção usa todas e o `sorted`/semente não altera nada) nem o cálculo (AUC via
+scikit-learn ≡ Mann-Whitney). A versão original usava `cv2.resize` sem especificar
+interpolação (default `INTER_LINEAR`); o pipeline atual usa `INTER_AREA` na redução,
+recomendada para diminuir imagens (menos *aliasing*). Ao forçar `INTER_LINEAR`, o AUC volta
+a **0,9469 exato** — confirmando que a interpolação é a única fonte da diferença. As 248
+imagens cujo score muda são as **maiores** (maior lado médio 1570 px vs 1269 px nas
+inalteradas), onde as duas interpolações mais divergem.
 
-Na **Chest X-Ray**, a versão atual (com `INTER_AREA`) dá AUC 0,9358, e o trabalho original
-reportava 0,9469. A causa foi investigada e **confirmada por reprodução direta**: é o método
-de **interpolação** do redimensionamento — **não** a amostra (as 624 imagens são as mesmas nas
-duas versões, pois o conjunto de teste tem exatamente 234 + 390, então a seleção usa todas e o
-`sorted`/semente não altera nada) nem o cálculo (AUC via scikit-learn ≡ Mann-Whitney). A versão
-original usava `cv2.resize` sem especificar interpolação (default `INTER_LINEAR`); o pipeline
-atual usa `INTER_AREA` na redução, recomendada para diminuir imagens (menos *aliasing*). Ao
-forçar `INTER_LINEAR`, o AUC volta a **0,9469 exato** — confirmando que a interpolação é a
-única fonte da diferença. As 248 imagens cujo score muda são as **maiores** (maior lado médio
-1570 px vs 1269 px nas inalteradas), onde as duas interpolações mais divergem.
-
-**Para reproduzir o valor original na Chest X-Ray (AUC 0,9469):** em
-`src/pneumoshift/preprocess.py`, na função `esticar`, force `INTER_LINEAR`:
+**Para reproduzir o AUC 0,9469 na Chest X-Ray:** em `src/pneumoshift/preprocess.py`, na
+função `esticar`, force `INTER_LINEAR`:
 
 ```python
 # def esticar(img, size=IMG_SIZE):
@@ -184,11 +209,9 @@ forçar `INTER_LINEAR`, o AUC volta a **0,9469 exato** — confirmando que a int
     return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)   # reproduz a versao original
 ```
 
-Depois rode `avaliar_lote.py` (kaggle, esticar) + `analise_estatistica.py`. A versão corrigida
-mantém `INTER_AREA` por ser tecnicamente superior na redução.
+Depois rode `avaliar_lote.py` (cxray, esticar). A versao corrigida mantem `INTER_AREA` por
+ser tecnicamente superior na reducao.
 
-> A versão corrigida do trabalho adota `GEOMETRIA = "padding"` (preserva a proporção da
-> imagem, conforme a devolutiva); a geometria `esticar` fica disponível para rastreabilidade
-> e para a análise de sensibilidade da geometria.
-
-Uma nota final: o passo `kaggle` acima refere-se à base **Chest X-Ray** (`BASE = "cxray"`).
+> A versao corrigida adota `GEOMETRIA = "padding"` (preserva a proporcao da imagem, conforme
+> a devolutiva); a geometria `esticar` fica disponivel para rastreabilidade e para a analise
+> de sensibilidade da geometria.

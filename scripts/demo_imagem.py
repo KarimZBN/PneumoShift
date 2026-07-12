@@ -31,7 +31,7 @@ BASES_VALIDAS = ("cxray", "rsna")   # sorteaveis quando BASE == "aleatorio"
 MOSTRAR_GRADCAM = True
 SALVAR_SAIDA = True
 
-GRADCAM_DIR = paths.RESULTADOS / "gradcam"
+GRADCAM_DIR = paths.RESULTADOS / "APOIO_explicabilidade" / "demos"
 
 
 def main():

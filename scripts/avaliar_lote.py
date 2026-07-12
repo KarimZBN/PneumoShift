@@ -1,15 +1,9 @@
 """
-Avaliacao em lote do classificador de pneumonia (modelo Keras .h5).
+Avalia a Chest X-Ray sobre a amostra pareada (234 normais + 390 pneumonia), limiar 0,5.
 
-Roda uma vez por base sobre o conjunto de teste pareado:
-    Kaggle (Chest X-Ray, pediatrico) -> 234 normais + 390 pneumonia
-    RSNA   (adulto, convertido)      -> 234 normais + 390 pneumonia
-
-O pareamento (mesma quantidade e proporcao) mantem constante a variavel "origem dos
-dados". A amostra 234/390 corresponde ao conjunto de teste do Kaggle usado por Shao (2021).
-
-Para cada imagem grava-se o score da classe pneumonia (usado no AUC). As metricas
-derivam da matriz de confusao.
+Para cada imagem grava o score da classe pneumonia (usado no AUC); as metricas derivam da
+matriz de confusao. A estatistica (IC bootstrap, calibracao) e acrescentada ao metricas.json
+por analise_estatistica.py.
 
 Uso:
     python scripts/avaliar_lote.py      (ajuste BASE e GEOMETRIA no topo)
@@ -34,7 +28,7 @@ from pneumoshift.metrics import CLASS_NAMES, LIMIAR
 
 
 # --- Configuracao ---
-BASE = "rsna"                  # "cxray" ou "rsna"
+BASE = "cxray"                 # base interna (a RSNA tem scripts avaliar_rsna_*)
 GEOMETRIA = "padding"          # "padding" (letterbox) ou "esticar" (resize direto)
 BATCH_SIZE = 100
 # Amostra pareada: 234 normais + 390 pneumonia (N_NORMAL/N_PNEUMONIA em pneumoshift/data.py).
@@ -167,21 +161,43 @@ def main():
     print(f" Brier:          {met['brier']:.4f}")
     print(f" ECE:            {met['ece']:.4f}")
 
-    OUT_DIR = paths.nova_execucao(BASE, GEOMETRIA)
+    # padding -> PRINCIPAL; esticar (comparacao de geometria) -> DESCARTAVEL.
+    if GEOMETRIA == "esticar":
+        prefixo, nome = "DESCARTAVEL", f"{BASE}-esticar"
+    else:
+        prefixo, nome = "PRINCIPAL", BASE
+    OUT_DIR = paths.pasta_resultado(prefixo, nome)
     escrever_csv(OUT_DIR / "predicoes.csv", met, linhas, total, y_score)
     escrever_json(OUT_DIR / "metricas.json", met, total, y_score)
-    print(f"\nResultados salvos em: {OUT_DIR}/ (predicoes.csv, metricas.json)")
+    print(f"\nResultados salvos em: {OUT_DIR}/")
 
-    # Analise estatistica desta execucao (AUC/Brier/ECE + IC bootstrap, roc.png, calibracao.png).
-    # Import tardio: so carrega matplotlib/sklearn quando de fato roda. Tolerante a falha para
-    # nao perder o CSV/JSON ja gravados acima.
+    # Estatistica desta execucao: acrescenta AUC/Brier/ECE + IC bootstrap ao metricas.json
+    # e gera imagens/roc.png e imagens/calibracao.png. Import tardio (matplotlib/sklearn so
+    # quando roda); tolerante a falha para nao perder o CSV/JSON ja gravados.
     try:
         from analise_estatistica import analisar_pasta
         analisar_pasta(BASE, GEOMETRIA, OUT_DIR)
-        print(f"Estatistica gerada em: {OUT_DIR}/ (metricas_estat.json, roc.png, calibracao.png)")
+        print(f"Estatistica adicionada ao metricas.json; figuras em {OUT_DIR}/imagens/")
     except Exception as e:
         print(f"[aviso] analise estatistica nao rodou ({e}). "
               f"Rode 'python scripts/analise_estatistica.py' depois.")
+
+    paths.escrever_leia(
+        OUT_DIR,
+        f"Chest X-Ray — {GEOMETRIA}" if BASE == "cxray" else f"{BASE} — {GEOMETRIA}",
+        ("Chest X-Ray (base interna), geometria padding." if prefixo == "PRINCIPAL"
+         else "Chest X-Ray com geometria esticar (comparacao de geometria)."),
+        "Avaliacao sobre a amostra pareada (234 normal + 390 pneumonia), limiar 0,5. "
+        "A estatistica (IC bootstrap, calibracao) esta no metricas.json e em imagens/.",
+        {"metricas.json": "metricas + IC bootstrap + saturados",
+         "predicoes.csv": "predicao por imagem (score cru)",
+         "imagens/roc.png": "curva ROC", "imagens/calibracao.png": "curva de calibracao"},
+        {"AUC": f"{met['auc']:.4f}",
+         "Acuracia": f"{met['acuracia']*100:.2f}%",
+         "Sensibilidade": f"{met['sensibilidade']*100:.2f}%",
+         "Especificidade": f"{met['especificidade']*100:.2f}%",
+         "Brier": f"{met['brier']:.4f}", "Geometria": GEOMETRIA})
+
 
 if __name__ == "__main__":
     main()

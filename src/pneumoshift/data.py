@@ -27,17 +27,6 @@ def ler_rotulos_rsna(labels_csv):
     return pneumonia_ids - ambiguos, normal_ids - ambiguos, ambiguos
 
 
-def ler_split(caminho):
-    """Le um arquivo de split (uma coluna patientId) e devolve a lista de IDs, em ordem."""
-    ids = []
-    with open(caminho, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            pid = (row.get("patientId") or "").strip()
-            if pid:
-                ids.append(pid)
-    return ids
-
-
 def selecionar(pasta, n, seed=SEED):
     """Seleciona reprodutivelmente n arquivos de imagem de `pasta`.
 

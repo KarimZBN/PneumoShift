@@ -7,7 +7,8 @@ Pacote com os componentes reutilizaveis pelos scripts em scripts/ e testes em te
     metrics     matriz de confusao, AUC e rotulagem VP/VN/FP/FN
     gradcam     Grad-CAM sobre o MobileNetV2 aninhado
     inferencia  inferencia sobre uma pasta de imagens
+    scores      cache de scores por paciente e avaliacao de subconjuntos
 """
-from . import paths, preprocess, data, metrics, gradcam, inferencia
+from . import paths, preprocess, data, metrics, gradcam, inferencia, scores
 
-__all__ = ["paths", "preprocess", "data", "metrics", "gradcam", "inferencia"]
+__all__ = ["paths", "preprocess", "data", "metrics", "gradcam", "inferencia", "scores"]

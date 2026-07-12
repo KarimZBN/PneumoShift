@@ -3,7 +3,7 @@ Compara o DICOM bruto da RSNA com o PNG convertido e mede o aspect ratio das bas
 
   (1) ORIENTACAO / CANTOS — reproduz em memoria a conversao do converter_rsna.py
       (min-max 0-255, TAMANHO ORIGINAL) e compara, pixel a pixel, com o PNG salvo em
-      dados/test/rsna_pool. Igualdade indica que a conversao nao gira, espelha nem inverte
+      dados/processed/rsna. Igualdade indica que a conversao nao gira, espelha nem inverte
       a imagem, e que os cantos escuros vem do proprio dado (recorte do detector).
       Imprime tambem a intensidade media dos 4 cantos (bruto x PNG).
 
@@ -37,9 +37,9 @@ TOL_QUADRADO = 0.02        # tolerancia p/ considerar "quadrado" (|AR-1| <= tol)
 
 # --- Caminhos ---
 DICOM_DIR = paths.DADOS / "raw" / "rsna" / "stage_2_train_images"
-PNG_RSNA_DIR = paths.DADOS_TESTE / "rsna_pool"     # {NORMAL,PNEUMONIA}/*.png
+PNG_RSNA_DIR = paths.RSNA_FULL     # {NORMAL,PNEUMONIA}/*.png
 KAGGLE_DIR = paths.DADOS_TESTE / "cxray"          # {NORMAL,PNEUMONIA}/*.jpeg
-RESULTS_DIR = paths.RESULTADOS / "csv"
+RESULTS_DIR = paths.RESULTADOS / "APOIO_provas-dicom"
 
 
 def converter_em_memoria(patient_id):
@@ -91,7 +91,7 @@ def prova_orientacao():
     amostra = pngs[:N_COMPARAR]
 
     if not amostra:
-        print("  Nenhum PNG encontrado em dados/test/rsna_pool — rode converter_rsna.py antes.")
+        print("  Nenhum PNG encontrado em dados/processed/rsna — rode converter_rsna.py antes.")
         return
 
     identicos = divergentes = sem_dicom = 0
